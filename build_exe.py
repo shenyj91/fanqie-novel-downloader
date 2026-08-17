@@ -19,10 +19,10 @@ def main():
         "--name", "番茄小说下载器",
         "--clean",
         "--noconfirm",
-        "--icon", "icon.ico" if os.path.exists("icon.ico") else None,
-        "gui_long.py",
     ]
-    opts = [o for o in opts if o is not None]
+    if os.path.exists("icon.ico"):
+        opts += ["--icon", "icon.ico"]
+    opts.append("gui_long.py")
 
     import PyInstaller.__main__
     PyInstaller.__main__.run(opts)

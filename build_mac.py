@@ -20,10 +20,10 @@ def main():
         "--clean",
         "--noconfirm",
         "--osx-bundle-identifier", "com.syj.fanqie-short",
-        "--icon", "icon.icns" if os.path.exists("icon.icns") else None,
-        "gui_short.py",
     ]
-    opts = [o for o in opts if o is not None]
+    if os.path.exists("icon.icns"):
+        opts += ["--icon", "icon.icns"]
+    opts.append("gui_short.py")
 
     import PyInstaller.__main__
     PyInstaller.__main__.run(opts)
