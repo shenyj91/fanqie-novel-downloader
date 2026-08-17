@@ -134,9 +134,55 @@ def _json_get(url: str, timeout: int = 20, ua: str = UA_MOBILE, retries: int = 3
     return json.loads(text)
 
 
-def search_books(keyword: str, page: int = 1, per_page: int = 20) -> List[Book]:
+def search_books_app(keyword: str, page: int = 1, per_page: int = 20) -> List[Book]:
     """
-    关键词搜索（番茄官方搜索接口，明文返回）。
+    App 链路搜索（走公共中转 /api/search，内部调用番茄 App 搜索接口）。
+    与公开接口（novel.snssdk.com）索引不完全一致——App 能搜到的书，
+    公开接口有时搜不到（如《神厨老娘跟儿随军，首长香迷糊了》）。
+    返回 search_tabs 综合 tab 的结果，按热度/相关度排序。
+    """
+    offset = (page - 1) * per_page
+    url = f"{API_SEARCH_PROXY}?key={quote(keyword)}&offset={offset}"
+    data = _json_get(url, timeout=25, ua=UA_MOBILE)
+    books: List[Book] = []
+    tabs = (data.get("data") or {}).get("search_tabs") or []
+    if not tabs:
+        return books
+    # 综合 tab 排最前（tab_type=1）
+    tab0 = tabs[0]
+    items = tab0.get("data") or []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        bd = it.get("book_data") or []
+        b = bd[0] if isinstance(bd, list) and bd else bd
+        if not isinstance(b, dict):
+            continue
+        bid = b.get("book_id") or b.get("bookId") or ""
+        if not bid:
+            continue
+        books.append(
+            Book(
+                book_id=str(bid),
+                title=b.get("book_name") or b.get("title") or "",
+                author=b.get("author") or "",
+                category=b.get("category") or b.get("category_v2") or "",
+                desc=b.get("abstract") or "",
+                word_count=str(b.get("word_number") or b.get("wordNumber") or ""),
+                creation_status=str(b.get("creation_status") or b.get("is_finish") or ""),
+                thumb_url=b.get("thumb_url") or b.get("thumbUri") or "",
+                score=str(b.get("score") or ""),
+                genre=str(b.get("genre") or ""),
+            )
+        )
+    return books
+
+
+def search_books(keyword: str, page: int = 1, per_page: int = 20, fallback_app: bool = True) -> List[Book]:
+    """
+    关键词搜索（双通道）：
+      1. 番茄公开搜索接口（novel.snssdk.com）；
+      2. 若结果为空，自动切换 App 链路搜索（中转），补全 App 侧可见的书。
     page 从 1 开始；官方接口有 offset 翻页。
     """
     offset = (page - 1) * per_page
@@ -165,8 +211,14 @@ def search_books(keyword: str, page: int = 1, per_page: int = 20) -> List[Book]:
                 creation_status=str(item.get("creation_status") or ""),
                 thumb_url=item.get("thumb_url") or item.get("thumbUri") or "",
                 score=str(item.get("score") or ""),
+                genre=str(item.get("genre") or ""),
             )
         )
+    if not books and fallback_app:
+        try:
+            books = search_books_app(keyword, page=page, per_page=per_page)
+        except Exception:
+            pass
     return books
 
 
