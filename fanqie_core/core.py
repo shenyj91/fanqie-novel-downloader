@@ -214,7 +214,20 @@ def search_books(keyword: str, page: int = 1, per_page: int = 20, fallback_app: 
                 genre=str(item.get("genre") or ""),
             )
         )
-    if not books and fallback_app:
+    if fallback_app and books:
+        # 公开接口返回了结果，但书名没有精确命中 → 补查 App 链路，
+        # 若 App 侧有精确同名书则提到最前（公开索引可能是旧名/别名）。
+        exact = [b for b in books if b.title.strip() == keyword.strip()]
+        if not exact:
+            try:
+                app_books = search_books_app(keyword, page=1, per_page=per_page)
+                app_exact = [b for b in app_books if b.title.strip() == keyword.strip()]
+                if app_exact:
+                    exact_ids = {b.book_id for b in app_exact}
+                    books = app_exact + [b for b in books if b.book_id not in exact_ids]
+            except Exception:
+                pass
+    elif not books and fallback_app:
         try:
             books = search_books_app(keyword, page=page, per_page=per_page)
         except Exception:
