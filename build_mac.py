@@ -13,10 +13,11 @@ def main():
         if os.path.exists(d):
             shutil.rmtree(d, ignore_errors=True)
 
+    ascii_name = "FanqieShortDownloader"
     opts = [
         "--onefile",
         "--windowed",
-        "--name", "番茄短篇下载器",
+        "--name", ascii_name,
         "--clean",
         "--noconfirm",
         "--osx-bundle-identifier", "com.syj.fanqie-short",
@@ -27,7 +28,17 @@ def main():
 
     import PyInstaller.__main__
     PyInstaller.__main__.run(opts)
-    print("\n完成！app 位于 dist/番茄短篇下载器.app")
+
+    src = os.path.join("dist", ascii_name + ".app")
+    dst = os.path.join("dist", "番茄短篇下载器.app")
+    if os.path.exists(src):
+        if os.path.exists(dst):
+            shutil.rmtree(dst, ignore_errors=True)
+        os.rename(src, dst)
+        print("完成！app 位于 dist/番茄短篇下载器.app")
+    else:
+        print("警告：未找到产物，请检查 dist 目录")
+        print("dist 内容:", os.listdir("dist") if os.path.isdir("dist") else "dist 不存在")
 
 
 if __name__ == "__main__":
