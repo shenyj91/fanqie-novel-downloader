@@ -21,7 +21,7 @@ jobs:
           pip install pyinstaller
 
       - name: Build exe
-        working-directory: fanqie-tools
+        working-directory: .
         run: |
           python build_exe.py
 
@@ -29,4 +29,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 番茄小说下载器-exe
-          path: fanqie-tools/dist/番茄小说下载器.exe
+          path: dist/番茄小说下载器.exe
