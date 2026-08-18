@@ -159,7 +159,7 @@ class ShortAggGUI:
             self.btn_search.config(text="加载")
             self.btn_next.pack_forget()
             self.btn_load.pack(side="left", padx=4)
-            self.qm_tip.config(text="七猫短篇：粘贴 app-share.wtzw.com 分享链接或 bookId，加载详情后下载（第一章免费全文，付费章需 App 解锁）")
+            self.qm_tip.config(text="七猫短篇：粘贴 app-share.wtzw.com 分享链接或 bookId，加载详情后下载全文（免费+付费，走 book88 全文通道）")
             self.qm_tip.pack(anchor="w", padx=10, pady=(0, 2))
         self.count_label.config(text="")
 
@@ -233,7 +233,7 @@ class ShortAggGUI:
         self.search_list.insert("end", f"1. {book.title} | {book.author} | {book.word_count}字 | {book.chapter_count}章 {tag}")
         self.count_label.config(text="共 1 本（七猫短篇）", foreground="#333")
         desc = (book.desc or "")[:120]
-        self._set_detail(f"《{book.title}》 {book.author} | {book.word_count}字 | {book.chapter_count}章 | 第一章免费全文 {len(book.first_chapter_content)}字\n简介：{desc}\n说明：其余章节（含付费/看视频解锁）需在七猫 App 内解锁，下载时标注占位")
+        self._set_detail(f"《{book.title}》 {book.author} | {book.word_count}字 | {book.chapter_count}章\n简介：{desc}\n下载将获取全文（免费+付费，走 book88 全文通道）")
         self._set_status(f"[七猫短篇] 已加载：《{book.title}》")
 
     def _set_detail(self, text: str) -> None:
@@ -294,7 +294,10 @@ class ShortAggGUI:
                         progress_callback=lambda d, t, ch: self.msg_queue.put(("progress", (d, t))),
                         stop_event=self.stop_event,
                     )
-                    msg = f"  完成：第一章全文（{result['success_count']}）已下载，{result['paid_need']} 章付费需 App 解锁"
+                    if result.get("channel") == "book88":
+                        msg = f"  完成：全文 {result['success_count']} 章（免费+付费，book88 通道）"
+                    else:
+                        msg = f"  完成：第一章全文，{result['paid_need']} 章付费（book88 通道不可用）"
                     self.msg_queue.put(("log", msg))
                     self.msg_queue.put(("log", f"  输出：{result['txt_path']}"))
                 ok += 1

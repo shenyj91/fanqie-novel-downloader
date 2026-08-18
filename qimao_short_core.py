@@ -121,9 +121,9 @@ def download_book(
 ) -> Dict[str, Any]:
     """
     整本下载（七猫短篇）：
-    - 第一章免费全文写入
-    - 其余章节（含付费/看视频解锁）标注占位，需 App 内解锁
-    返回 {book_title, success_count, paid_need, total_count, txt_path}
+    优先走 book88 的 qimao 通道（后端封装七猫 App 接口）获取**免费+付费全文**；
+    book88 通道失败时 fallback 到 detail 接口第一章免费全文 + 其余章节付费标注。
+    返回 {book_title, success_count, paid_need, total_count, txt_path, channel}
     """
     save_dir = save_dir or os.path.join(os.path.expanduser("~"), "Desktop", "七猫短篇")
     os.makedirs(save_dir, exist_ok=True)
@@ -132,25 +132,58 @@ def download_book(
     if not book:
         raise RuntimeError(f"短篇不存在或获取失败: {book_id}")
     chapters = get_directory(book_id)
-    total = max(len(chapters), 1)
 
     if progress_callback:
-        progress_callback(0, total, "获取短篇信息...")
+        progress_callback(0, 1, "获取短篇信息...")
 
+    # ===== 通道1：book88 qimao 全文 =====
+    try:
+        import book88_core
+        if progress_callback:
+            progress_callback(0, 1, "book88 全文通道...")
+        client = book88_core._client()
+        title, author, content = client.download(book_id, "qimao")
+        if content and len(content) > 300:
+            head = (
+                f"书名：{title}\n作者：{author}\n"
+                f"字数：{book.word_count}字\n"
+                f"来源：七猫短篇（{book_id}）· book88 全文通道（免费+付费）\n"
+                f"章节：共 {len(chapters)} 章（全文已获取）\n\n"
+            )
+            path = os.path.join(save_dir, f"{_sanitize_filename(title)}.txt")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(head + content)
+            if progress_callback:
+                progress_callback(1, 1, "完成")
+            return {
+                "book_title": title,
+                "success_count": len(chapters) or 1,
+                "paid_need": 0,
+                "total_count": len(chapters),
+                "txt_path": path,
+                "source": SOURCE_NAME,
+                "channel": "book88",
+                "word_count": book.word_count,
+                "desc": book.desc,
+            }
+    except Exception as e:
+        if progress_callback:
+            progress_callback(0, 1, f"book88 通道失败，回退免费通道: {str(e)[:40]}")
+
+    # ===== 通道2：detail 第一章免费全文 + 其余章节标注 =====
     lines = [
         f"书名：{book.title}",
         f"作者：{book.author}",
         f"字数：{book.word_count}字",
         f"来源：七猫短篇（{book_id}）",
-        f"章节：共 {len(chapters)} 章（第一章免费，其余章节需 App 内观看视频/付费解锁）",
+        f"章节：共 {len(chapters)} 章（仅第一章免费，付费章节需 App 解锁）",
         "",
     ]
     free_ok = 0
     paid_need = 0
-
-    # 第一章（免费全文）
     if book.first_chapter_content:
-        lines.append(f"## 第1章 {book.first_chapter_content and chapters[0].title if chapters else '第一章'}\n")
+        ch1_title = chapters[0].title if chapters else "第一章"
+        lines.append(f"## 第1章 {ch1_title}\n")
         lines.append(book.first_chapter_content)
         lines.append("")
         free_ok += 1
@@ -158,8 +191,6 @@ def download_book(
         lines.append(f"## 第1章 {chapters[0].title}\n")
         lines.append("[第一章内容获取失败]")
         lines.append("")
-
-    # 其余章节标注
     for i, ch in enumerate(chapters, 1):
         if i == 1:
             continue
@@ -167,10 +198,10 @@ def download_book(
             lines.append("\n[下载已停止]")
             break
         lines.append(f"\n## 第{i}章 {ch.title}\n")
-        lines.append("[付费章节：需在七猫 App 内观看视频/付费解锁后获取全文]")
+        lines.append("[付费章节：book88 全文通道不可用，需在七猫 App 内解锁]")
         paid_need += 1
         if progress_callback:
-            progress_callback(i, total, ch.title)
+            progress_callback(i, len(chapters), ch.title)
         time.sleep(0.1)
 
     path = os.path.join(save_dir, f"{_sanitize_filename(book.title)}.txt")
@@ -184,6 +215,7 @@ def download_book(
         "total_count": len(chapters),
         "txt_path": path,
         "source": SOURCE_NAME,
+        "channel": "detail",
         "word_count": book.word_count,
         "desc": book.desc,
     }
