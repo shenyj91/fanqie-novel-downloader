@@ -24,7 +24,6 @@ def main() -> None:
     if os.path.exists(src):
         os.rename(src, dst)
     print("Done. exe at dist/")
-    print(dst)
 
 if __name__ == "__main__":
     main()
