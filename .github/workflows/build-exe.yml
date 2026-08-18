@@ -41,3 +41,14 @@ jobs:
         with:
           name: 番茄七猫聚合下载器-exe
           path: dist/番茄七猫聚合下载器.exe
+
+      - name: Build short agg exe
+        working-directory: .
+        run: |
+          python build_exe_short_agg.py
+
+      - name: Upload short agg exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: 番茄七猫短篇聚合下载器-exe
+          path: dist/番茄七猫短篇聚合下载器.exe
