@@ -20,10 +20,11 @@ def main() -> None:
     PyInstaller.__main__.run(opts)
 
     src = os.path.join("dist", "fanqie_qimao_agg.exe")
-    dst = os.path.join("dist", "番茄七猫聚合下载器.exe")
+    dst = os.path.join("dist", "\u756a\u8304\u4e03\u732b\u805a\u5408\u4e0b\u8f7d\u5668.exe")  # 番茄七猫聚合下载器.exe
     if os.path.exists(src):
         os.rename(src, dst)
-    print("\n完成！exe 位于 dist/番茄七猫聚合下载器.exe")
+    print("Done. exe at dist/")
+    print(dst)
 
 if __name__ == "__main__":
     main()
