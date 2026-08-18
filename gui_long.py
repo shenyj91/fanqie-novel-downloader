@@ -97,12 +97,28 @@ class FanqieGUI:
         mid = ttk.Frame(tab)
         mid.pack(fill="both", expand=True, padx=6, pady=4)
 
-        # 左侧：搜索结果
-        left = ttk.LabelFrame(mid, text="搜索结果")
+        # 左侧：搜索结果（多选 + 番茄橙高亮 + 大字 + 滚动条）
+        left = ttk.LabelFrame(mid, text="搜索结果（可多选，⌘/Ctrl+点，Shift+点）")
         left.pack(side="left", fill="both", expand=True, padx=(0, 4))
-        self.search_list = tk.Listbox(left, height=18)
-        self.search_list.pack(fill="both", expand=True, padx=4, pady=4)
+        lf_inner = ttk.Frame(left)
+        lf_inner.pack(fill="both", expand=True, padx=4, pady=4)
+        self.search_list = tk.Listbox(
+            lf_inner,
+            height=18,
+            selectmode=tk.EXTENDED,
+            selectbackground="#ff5722",
+            selectforeground="white",
+            font=("PingFang SC", 13),
+            activestyle="dotbox",
+        )
+        self.search_list.pack(side="left", fill="both", expand=True)
+        sb1 = ttk.Scrollbar(lf_inner, orient="vertical", command=self.search_list.yview)
+        sb1.pack(side="right", fill="y")
+        self.search_list.config(yscrollcommand=sb1.set)
         self.search_list.bind("<Double-Button-1>", lambda e: self.load_catalog_from_search())
+        self.search_list.bind("<Return>", lambda e: self.load_catalog_from_search())
+        self.search_list.bind("<Command-a>", lambda e: self.search_list.select_set(0, "end"))
+        self.search_list.bind("<Control-a>", lambda e: self.search_list.select_set(0, "end"))
 
         # 右侧：目录
         right = ttk.LabelFrame(mid, text="章节目录（双击左侧书目加载）")
@@ -138,9 +154,20 @@ class FanqieGUI:
         self.rank_limit.pack(side="left", padx=6)
         ttk.Button(bar, text="拉取榜单", command=self.fetch_rank).pack(side="left", padx=6)
 
-        self.rank_list = tk.Listbox(tab, height=20)
+        self.rank_list = tk.Listbox(
+            tab,
+            height=20,
+            selectmode=tk.EXTENDED,
+            selectbackground="#ff5722",
+            selectforeground="white",
+            font=("PingFang SC", 13),
+            activestyle="dotbox",
+        )
         self.rank_list.pack(fill="both", expand=True, padx=8, pady=4)
         self.rank_list.bind("<Double-Button-1>", lambda e: self.rank_download())
+        self.rank_list.bind("<Return>", lambda e: self.rank_download())
+        self.rank_list.bind("<Command-a>", lambda e: self.rank_list.select_set(0, "end"))
+        self.rank_list.bind("<Control-a>", lambda e: self.rank_list.select_set(0, "end"))
 
         bottom = ttk.Frame(tab, padding=6)
         bottom.pack(fill="x")

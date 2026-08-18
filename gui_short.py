@@ -104,11 +104,37 @@ class ShortStoryGUI:
         self.rank_num.set(20)
         self.rank_num.pack(side="left", padx=6)
         ttk.Button(bar, text="拉取前20榜单", command=self.fetch_rank).pack(side="left", padx=6)
-        ttk.Button(bar, text="批量下载全部", command=self.download_all_rank).pack(side="left", padx=6)
 
-        self.rank_list = tk.Listbox(tab, height=20)
-        self.rank_list.pack(fill="both", expand=True, padx=8, pady=4)
-        self.rank_list.bind("<Double-Button-1>", lambda e: self.download_one_rank())
+        # 列表（多选 + 番茄橙高亮 + 大字）
+        lf = ttk.LabelFrame(tab, text="榜单书单（可多选，⌘/Ctrl+点 多选，Shift+点 连选，双击单本下）", padding=4)
+        lf.pack(fill="both", expand=True, padx=8, pady=4)
+        self.rank_list = tk.Listbox(
+            lf,
+            height=18,
+            selectmode=tk.EXTENDED,
+            selectbackground="#ff5722",
+            selectforeground="white",
+            font=("PingFang SC", 13),
+            activestyle="dotbox",
+        )
+        self.rank_list.pack(fill="both", expand=True, side="left")
+        sb = ttk.Scrollbar(lf, orient="vertical", command=self.rank_list.yview)
+        sb.pack(side="right", fill="y")
+        self.rank_list.config(yscrollcommand=sb.set)
+        self.rank_list.bind("<Double-Button-1>", lambda e: self.download_selected_rank())
+        self.rank_list.bind("<Return>", lambda e: self.download_selected_rank())
+        self.rank_list.bind("<Command-a>", lambda e: self._select_all(self.rank_list))
+        self.rank_list.bind("<Control-a>", lambda e: self._select_all(self.rank_list))
+
+        # 底部按钮（更醒目）
+        bottom = ttk.Frame(tab, padding=6)
+        bottom.pack(fill="x")
+        ttk.Button(bottom, text="⬇ 下载已选", command=self.download_selected_rank).pack(side="left", padx=4)
+        ttk.Button(bottom, text="☑ 全选", command=lambda: self._select_all(self.rank_list)).pack(side="left", padx=4)
+        ttk.Button(bottom, text="☐ 反选", command=lambda: self._invert_selection(self.rank_list)).pack(side="left", padx=4)
+        ttk.Button(bottom, text="⬇ 全部下载", command=self.download_all_rank).pack(side="left", padx=4)
+        self.rank_count_label = ttk.Label(bottom, text="未加载", foreground="#888")
+        self.rank_count_label.pack(side="right", padx=8)
 
         tip = ttk.Label(
             tab,
@@ -132,14 +158,35 @@ class ShortStoryGUI:
         ttk.Button(bar, text="下一页", command=self.do_search_next).pack(side="left", padx=4)
         self.page = 1
 
-        self.search_list = tk.Listbox(tab, height=16)
-        self.search_list.pack(fill="both", expand=True, padx=8, pady=4)
+        # 列表（多选 + 番茄橙高亮 + 大字）
+        lf = ttk.LabelFrame(tab, text="搜索结果（可多选，⌘/Ctrl+点 多选，Shift+点 连选，双击/回车单本下）", padding=4)
+        lf.pack(fill="both", expand=True, padx=8, pady=4)
+        self.search_list = tk.Listbox(
+            lf,
+            height=18,
+            selectmode=tk.EXTENDED,
+            selectbackground="#ff5722",
+            selectforeground="white",
+            font=("PingFang SC", 13),
+            activestyle="dotbox",
+        )
+        self.search_list.pack(fill="both", expand=True, side="left")
+        sb = ttk.Scrollbar(lf, orient="vertical", command=self.search_list.yview)
+        sb.pack(side="right", fill="y")
+        self.search_list.config(yscrollcommand=sb.set)
         self.search_list.bind("<Double-Button-1>", lambda e: self.download_selected_search())
+        self.search_list.bind("<Return>", lambda e: self.download_selected_search())
+        self.search_list.bind("<Command-a>", lambda e: self._select_all(self.search_list))
+        self.search_list.bind("<Control-a>", lambda e: self._select_all(self.search_list))
 
+        # 底部按钮（更醒目）
         bottom = ttk.Frame(tab, padding=6)
         bottom.pack(fill="x")
-        ttk.Button(bottom, text="下载选中整本", command=self.download_selected_search).pack(side="left")
-        ttk.Label(bottom, text="（双击列表项也可触发；含付费/广告解锁章节）", foreground="#888").pack(side="left", padx=8)
+        ttk.Button(bottom, text="⬇ 下载已选", command=self.download_selected_search).pack(side="left", padx=4)
+        ttk.Button(bottom, text="☑ 全选", command=lambda: self._select_all(self.search_list)).pack(side="left", padx=4)
+        ttk.Button(bottom, text="☐ 反选", command=lambda: self._invert_selection(self.search_list)).pack(side="left", padx=4)
+        self.search_count_label = ttk.Label(bottom, text="未搜索", foreground="#888")
+        self.search_count_label.pack(side="right", padx=8)
 
     # ---- 任务 Tab ----
     def _build_task_tab(self) -> None:
@@ -226,6 +273,7 @@ class ShortStoryGUI:
         for i, b in enumerate(self.rank_items):
             wc = b.word_count or "?"
             self.rank_list.insert("end", f"{i + 1:>3}. {b.title} | {b.author} | {b.category} | {wc}字")
+        self.rank_count_label.config(text=f"共 {len(self.rank_items)} 本", foreground="#333")
         self._set_status(f"{rank_name}：{len(self.rank_items)} 本（真实书名已还原）")
 
     def _start_download(self, book_id: str, title: str = "") -> None:
@@ -250,32 +298,36 @@ class ShortStoryGUI:
         except Exception as e:
             self.msg_queue.put(("done", f"下载失败：{e}"))
 
-    def download_one_rank(self) -> None:
-        sel = self.rank_list.curselection()
-        if not sel:
-            messagebox.showwarning("提示", "请先在榜单列表选择一本书")
-            return
-        b = self.rank_items[sel[0]]
-        self._start_download(b.book_id, b.title)
+    def _select_all(self, lb: tk.Listbox) -> None:
+        lb.select_set(0, "end")
+        lb.focus_set()
 
-    def download_all_rank(self) -> None:
-        if not self.rank_items:
-            messagebox.showwarning("提示", "请先拉取榜单")
+    def _invert_selection(self, lb: tk.Listbox) -> None:
+        cur = set(lb.curselection())
+        lb.select_clear(0, "end")
+        for i in range(lb.size()):
+            if i not in cur:
+                lb.select_set(i)
+
+    def _download_books(self, books: list, tag: str = "下载") -> None:
+        """把选中或全部的书加入下载队列（后台批量）"""
+        if not books:
+            messagebox.showwarning("提示", "列表为空")
             return
-        books = list(self.rank_items)
         self.stop_event.clear()
-        self.nb.select(self.nb.tabs()[2])
-        self._log(f"批量下载榜单 {len(books)} 本...")
-        threading.Thread(target=self._rank_batch_thread, args=(books,), daemon=True).start()
+        self.nb.select(self.nb.tabs()[2])  # 切到下载任务 tab
+        self._log(f"批量{tag}：{len(books)} 本")
+        threading.Thread(target=self._batch_thread, args=(books, tag), daemon=True).start()
 
-    def _rank_batch_thread(self, books) -> None:
+    def _batch_thread(self, books, tag: str) -> None:
         total = len(books)
+        ok = fail = 0
         for i, b in enumerate(books):
             if self.stop_event.is_set():
                 self.msg_queue.put(("log", "批量下载已停止"))
                 break
             self.msg_queue.put(("status", f"({i + 1}/{total}) {b.title}"))
-            self.msg_queue.put(("log", f"({i + 1}/{total}) 下载：{b.title}"))
+            self.msg_queue.put(("log", f"({i + 1}/{total}) {tag}：{b.title}"))
             try:
                 result = download_book(
                     b.book_id,
@@ -283,10 +335,12 @@ class ShortStoryGUI:
                     progress_callback=lambda d, t, ch: self.msg_queue.put(("progress", (d, t))),
                     stop_event=self.stop_event,
                 )
+                ok += 1
                 self.msg_queue.put(("log", f"  完成：{result['success_count']}/{result['total_count']} 章 → {result['txt_path']}"))
             except Exception as e:
+                fail += 1
                 self.msg_queue.put(("log", f"  {b.title} 失败：{e}"))
-        self.msg_queue.put(("done", f"批量下载结束（{total} 本）"))
+        self.msg_queue.put(("done", f"批量{tag}结束：成功 {ok}，失败 {fail}（共 {total} 本）"))
 
     # ---- 搜索 ----
     def _search(self, page: int) -> None:
@@ -305,6 +359,7 @@ class ShortStoryGUI:
         for i, b in enumerate(items):
             tag = "【完结】" if b.finished else "【连载】"
             self.search_list.insert("end", f"{i + 1}. {b.title} | {b.author} | {b.category} {tag}")
+        self.search_count_label.config(text=f"共 {len(items)} 条（第 {page} 页）", foreground="#333")
         self._set_status(f"搜索完成：{len(items)} 条（第 {page} 页）")
 
     def do_search(self) -> None:
@@ -315,13 +370,32 @@ class ShortStoryGUI:
         self.page += 1
         self._search(self.page)
 
+    def download_selected_rank(self) -> None:
+        sel = self.rank_list.curselection()
+        if not sel:
+            messagebox.showwarning("提示", "请先在榜单列表选择书（可多选：⌘/Ctrl+点，Shift+点）")
+            return
+        books = [self.rank_items[i] for i in sel]
+        self._download_books(books, tag=f"榜单下载({len(books)}本)")
+
+    def download_all_rank(self) -> None:
+        if not self.rank_items:
+            messagebox.showwarning("提示", "请先拉取榜单")
+            return
+        if not messagebox.askyesno("确认", f"将批量下载榜单全部 {len(self.rank_items)} 本，是否继续？"):
+            return
+        self._download_books(list(self.rank_items), tag=f"榜单全量({len(self.rank_items)}本)")
+
     def download_selected_search(self) -> None:
         sel = self.search_list.curselection()
         if not sel:
-            messagebox.showwarning("提示", "请先选择一本书")
+            messagebox.showwarning("提示", "请先选择书（可多选：⌘/Ctrl+点，Shift+点）")
             return
-        b = self.search_items[sel[0]]
-        self._start_download(b.book_id, b.title)
+        books = [self.search_items[i] for i in sel]
+        if len(books) == 1:
+            self._start_download(books[0].book_id, books[0].title)
+        else:
+            self._download_books(books, tag=f"搜索下载({len(books)}本)")
 
     def stop(self) -> None:
         self.stop_event.set()
