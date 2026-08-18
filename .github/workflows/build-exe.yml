@@ -18,15 +18,26 @@ jobs:
 
       - name: Install deps
         run: |
-          pip install pyinstaller
+          pip install pyinstaller pycryptodome
 
-      - name: Build exe
+      - name: Build long exe
         working-directory: .
         run: |
           python build_exe.py
 
-      - name: Upload artifact
+      - name: Upload long exe
         uses: actions/upload-artifact@v4
         with:
           name: 番茄小说下载器-exe
           path: dist/番茄小说下载器.exe
+
+      - name: Build agg exe
+        working-directory: .
+        run: |
+          python build_exe_agg.py
+
+      - name: Upload agg exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: 番茄七猫聚合下载器-exe
+          path: dist/番茄七猫聚合下载器.exe
