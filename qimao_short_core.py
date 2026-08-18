@@ -136,13 +136,17 @@ def download_book(
     if progress_callback:
         progress_callback(0, 1, "获取短篇信息...")
 
-    # ===== 通道1：book88 qimao 全文 =====
+    # ===== 通道1：book88 qimao 全文（有高频限流，401 时等待重试 1 次）=====
     try:
         import book88_core
         if progress_callback:
             progress_callback(0, 1, "book88 全文通道...")
         client = book88_core._client()
         title, author, content = client.download(book_id, "qimao")
+        if not content or len(content) <= 300:
+            # 限流/空内容：等 8 秒重试一次
+            time.sleep(8)
+            title, author, content = client.download(book_id, "qimao")
         if content and len(content) > 300:
             head = (
                 f"书名：{title}\n作者：{author}\n"
@@ -168,7 +172,7 @@ def download_book(
             }
     except Exception as e:
         if progress_callback:
-            progress_callback(0, 1, f"book88 通道失败，回退免费通道: {str(e)[:40]}")
+            progress_callback(0, 1, f"book88 通道受限，回退免费通道: {str(e)[:40]}")
 
     # ===== 通道2：detail 第一章免费全文 + 其余章节标注 =====
     lines = [
