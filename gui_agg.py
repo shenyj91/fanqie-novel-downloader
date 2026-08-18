@@ -24,12 +24,14 @@ from tkinter import filedialog, messagebox, ttk
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import qimao_core
+import heiyan_core
+import book88_core
 from fanqie_core import download_book as fanqie_download
 
-APP_TITLE = "番茄·七猫 聚合下载器"
-APP_VERSION = "1.0.0"
+APP_TITLE = "番茄·七猫·黑岩·book88 聚合下载器"
+APP_VERSION = "1.1.0"
 
-SOURCES = ["番茄小说", "七猫小说"]
+SOURCES = ["番茄小说", "七猫小说", "黑岩", "book88"]
 
 
 class AggGUI:
@@ -74,12 +76,20 @@ class AggGUI:
         bar.pack(fill="x")
         ttk.Label(bar, text="书源:").pack(side="left")
         self.source_var = tk.StringVar(value=SOURCES[0])
-        self.source_box = ttk.Combobox(bar, textvariable=self.source_var, state="readonly", values=SOURCES, width=10)
+        self.source_box = ttk.Combobox(bar, textvariable=self.source_var, state="readonly", values=SOURCES, width=12)
         self.source_box.pack(side="left", padx=6)
         self.source_box.bind("<<ComboboxSelected>>", lambda e: self._on_source_change())
 
+        # book88 平台子选择（仅 book88 源时显示）
+        self.b88_label = ttk.Label(bar, text="平台:")
+        self.b88_box = ttk.Combobox(bar, state="readonly", width=8,
+                                    values=list(book88_core.PLATFORMS.keys()))
+        self.b88_box.set("dianzhong")
+        self.b88_label.pack_forget()
+        self.b88_box.pack_forget()
+
         ttk.Label(bar, text="书名/关键词:").pack(side="left", padx=(12, 0))
-        self.kw_entry = ttk.Entry(bar, width=34)
+        self.kw_entry = ttk.Entry(bar, width=30)
         self.kw_entry.pack(side="left", padx=6)
         self.kw_entry.bind("<Return>", lambda e: self.do_search())
         ttk.Button(bar, text="搜索", command=self.do_search).pack(side="left")
@@ -112,7 +122,7 @@ class AggGUI:
         ttk.Button(bottom, text="☐ 反选", command=self._invert_selection).pack(side="left", padx=4)
         self.count_label = ttk.Label(bottom, text="未搜索", foreground="#888")
         self.count_label.pack(side="right", padx=8)
-        ttk.Label(bottom, text="番茄=免费+看广告解锁全文；七猫=免费全文", foreground="#888").pack(side="right", padx=8)
+        ttk.Label(bottom, text="番茄/七猫/黑岩=官方直连；book88=12平台配额通道", foreground="#888").pack(side="right", padx=8)
 
     def _build_task_tab(self) -> None:
         tab = ttk.Frame(self.nb)
@@ -137,6 +147,13 @@ class AggGUI:
         self.search_items = []
         self.search_list.delete(0, "end")
         self.count_label.config(text="已切换书源", foreground="#888")
+        # book88 源显示平台子选择
+        if self._source() == "book88":
+            self.b88_label.pack(side="left", padx=(12, 0))
+            self.b88_box.pack(side="left", padx=4)
+        else:
+            self.b88_label.pack_forget()
+            self.b88_box.pack_forget()
 
     def _search(self, page: int) -> None:
         kw = self.kw_entry.get().strip()
@@ -150,9 +167,21 @@ class AggGUI:
                 from fanqie_core import search_books
                 items = search_books(kw, page=page)
                 items = [(b, "番茄小说") for b in items]
-            else:
+            elif src == "七猫小说":
                 items = qimao_core.search_books(kw, page=page)
                 items = [(b, "七猫小说") for b in items]
+            elif src == "黑岩":
+                items = heiyan_core.search_books(kw, page=page)
+                items = [(b, "黑岩") for b in items]
+            else:  # book88
+                pf = self.b88_box.get() or "dianzhong"
+                try:
+                    quota = book88_core.get_quota()
+                    self._set_status(f"[book88/{book88_core.PLATFORMS.get(pf, pf)}] 配额 {quota} | 搜索中...")
+                except Exception:
+                    pass
+                items = book88_core.search_books(kw, page=page, platform=pf)
+                items = [(b, f"book88/{book88_core.PLATFORMS.get(pf, pf)}") for b in items]
         except Exception as e:
             messagebox.showerror("搜索失败", str(e))
             return
@@ -216,10 +245,28 @@ class AggGUI:
                         progress_callback=lambda d, t, ch: self.msg_queue.put(("progress", (d, t))),
                         stop_event=self.stop_event,
                     )
-                else:
+                elif src == "七猫小说":
                     result = qimao_core.download_book(
                         b.book_id,
                         save_dir=self.save_var.get(),
+                        progress_callback=lambda d, t, ch: self.msg_queue.put(("progress", (d, t))),
+                        stop_event=self.stop_event,
+                    )
+                elif src == "黑岩":
+                    result = heiyan_core.download_book(
+                        b.book_id,
+                        save_dir=self.save_var.get(),
+                        progress_callback=lambda d, t, ch: self.msg_queue.put(("progress", (d, t))),
+                        stop_event=self.stop_event,
+                    )
+                    if result.get("paid_need"):
+                        self.msg_queue.put(("log", f"  提示：{result['paid_need']} 章付费需黑岩账号登录(cookie)"))
+                else:  # book88/平台
+                    pf = getattr(b, "platform", None) or (b.extra or {}).get("platform", "dianzhong")
+                    result = book88_core.download_book(
+                        b.book_id,
+                        save_dir=self.save_var.get(),
+                        platform=pf,
                         progress_callback=lambda d, t, ch: self.msg_queue.put(("progress", (d, t))),
                         stop_event=self.stop_event,
                     )
@@ -228,6 +275,11 @@ class AggGUI:
             except Exception as e:
                 fail += 1
                 self.msg_queue.put(("log", f"  {b.title} 失败：{e}"))
+        try:
+            quota = book88_core.get_quota()
+            self.msg_queue.put(("log", f"book88 剩余配额：{quota}"))
+        except Exception:
+            pass
         self.msg_queue.put(("done", f"批量下载结束：成功 {ok}，失败 {fail}（共 {total} 本）"))
 
     # ---------- 工具 ----------
